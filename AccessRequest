@@ -1,0 +1,152 @@
+package com.test.dec2020.dim.test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+
+import sailpoint.api.SailPointContext;
+import sailpoint.api.SailPointFactory;
+import sailpoint.api.Workflower;
+import sailpoint.object.ProvisioningPlan;
+import sailpoint.object.ProvisioningPlan.AccountRequest;
+import sailpoint.object.ProvisioningPlan.AttributeRequest;
+import sailpoint.service.AttachmentDTO;
+import sailpoint.service.IdentitySummaryDTO;
+import sailpoint.object.Attachment;
+import sailpoint.object.Bundle;
+import sailpoint.object.Filter;
+import sailpoint.object.Identity;
+import sailpoint.object.QueryOptions;
+import sailpoint.object.Workflow;
+import sailpoint.object.WorkflowLaunch;
+import sailpoint.spring.SpringStarter;
+import sailpoint.tools.GeneralException;
+
+public class AccessRequest {
+	static Logger log = Logger.getLogger("sailpoint.iiq.TestIIQAccessRequest");
+	public static void main(String[] args) throws GeneralException {
+
+
+		SpringStarter starter = new SpringStarter("iiqBeans");
+		starter.start();
+		SailPointContext context = SailPointFactory.createContext();
+		
+		log.setLevel(Level.DEBUG);
+	
+		QueryOptions op = new QueryOptions();
+		op.addFilter(Filter.eq("inactive", false));
+		op.addFilter(Filter.eq("name", "007"));
+		List<Identity> identityList = context.getObjects(Identity.class, op);
+
+		// ==Variable to hold the Id names Initiated
+
+		String trMsg = "Id Names : ";
+		// ==Refined Identity List after checking StartDate and DN Values
+
+		int numIdentities = 0;
+		if (identityList != null) {
+			
+			for (Identity identityReq : identityList) {
+				String myIdentityName = identityReq.getName();
+				String dispalyName = identityReq.getDisplayName();
+				log.debug("myIdentityName = " + myIdentityName);
+			
+
+			//<----------------------------------------------Bundle ------------------------------------------->
+			 List<AttributeRequest> listAtt= new ArrayList<AttributeRequest>();
+			Bundle bundle= context.getObjectByName(Bundle.class, "Test Role ACCESS");		
+			AttributeRequest attributeRequest2 = new AttributeRequest("assignedRolesTest", ProvisioningPlan.Operation.Add,bundle.getName());
+			attributeRequest2.setDisplayValue(bundle.getDisplayableName());
+			listAtt.add(attributeRequest2);
+			
+			//<----------------------------------------------AccountRequest ------------------------------------------->
+
+			AccountRequest accountRequest = new AccountRequest();
+			accountRequest.setApplication("CustomDB");
+			accountRequest.setNativeIdentity(myIdentityName); // Account
+			accountRequest.setComments("Testing Amit");
+			accountRequest.setOp(ProvisioningPlan.ObjectOperation.Set);
+			
+			//<-------------------setAttributeRequests --------------------->
+			accountRequest.setAttributeRequests(listAtt);
+			
+
+			//<----------------------------------------------Attachment ------------------------------------------->
+			 List<AttachmentDTO> attchlist= new ArrayList<AttachmentDTO>();
+            Attachment attachment23 = (Attachment) context.getObjectById(Attachment.class, "c0a85101756a1e9281756a9b23610090");
+			 AttachmentDTO attachment234= new AttachmentDTO(attachment23);
+           attchlist.add(attachment234);
+            accountRequest.put("attachmentConfigList", "");
+			 accountRequest.put("attachments",attchlist);
+		
+		  //<----------------------------------------------PLAN-1------------------------------------------->
+				
+			Identity myIdentity = context.getObjectByName(Identity.class, myIdentityName);
+			ProvisioningPlan plan = new ProvisioningPlan();
+			plan.put("source","LCM");  // UI or LCM
+			plan.setIdentity(myIdentity);
+			//<-------------------accountRequest Add in Plan --------------------->
+			plan.add(accountRequest);
+
+			//<----------------------------------------------workflowArgs - 2------------------------------------------->
+			
+	    	Map<String, Object> workflowArgs = new HashMap<String, Object>();
+			
+			workflowArgs.put("flow", "EntitlementsRequest");  //Values from LCM are AccountsRequest, EntitlementsRequest, RolesRequest, UnlockAccount
+			workflowArgs.put("policyScheme","continue");
+			//workflowArgs.put("approvalScheme","manager");
+			workflowArgs.put("allowRequestsWithViolations","true");
+			workflowArgs.put("fallbackApprover","spadmin");
+			workflowArgs.put("approvalMode","parallel");
+			workflowArgs.put("identityDisplayName",dispalyName);
+			workflowArgs.put("identityName",myIdentityName);
+			workflowArgs.put("identityRequestId","003");
+			workflowArgs.put("approvalScheme","owner,manager,securityOfficer,identity");
+			workflowArgs.put("securityOfficerName","005");
+			workflowArgs.put("approvingIdentities","010,902");
+			
+			
+			//Create WorkflowLaunch and set values
+			workflowArgs.put("plan", plan);
+			
+			//<----------------------------------------------WorkflowLaunch - 3------------------------------------------->
+			
+			WorkflowLaunch wflaunch = new WorkflowLaunch();
+			Workflow wf = (Workflow) context.getObjectByName(Workflow.class,"DIM_71_LCM Provisioning");
+			System.out.println("plan: "+plan.toXml());
+			wflaunch.setWorkflowName(wf.getName());
+			wflaunch.setWorkflowRef(wf.getName());
+		//	wflaunch.setCaseName("LCM Provisioning");
+			wflaunch.setVariables(workflowArgs);
+
+
+			//<----------------------------------------------launch - 4------------------------------------------->
+
+			Workflower workflower = new Workflower(context);
+			WorkflowLaunch launch = workflower.launch(wflaunch);
+			
+
+			//<----------------------------------------------workFlowId - 4------------------------------------------->
+
+			String workFlowId = launch.getWorkflowCase().getId();
+			System.out.println("workFlowId: "+workFlowId);
+			}
+		}
+
+		log.debug(trMsg);
+		context.commitTransaction();
+
+	
+		
+		
+		
+
+	
+
+	}
+
+}
